@@ -5,37 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+    <style>
+        video {
+            width: 100%;
+            max-width: 500px;
+        }
+    </style>
 </head>
 <body>
     <h2>Scan QR Code</h2>
     <video id="qr-video" autoplay></video>
+    <canvas id="qr-canvas" hidden></canvas>
     <p>Scanned Data: <span id="qr-result">None</span></p>
 
     <script>
         async function startQRScanner() {
             const video = document.getElementById("qr-video");
             const qrResult = document.getElementById("qr-result");
+            const canvas = document.getElementById("qr-canvas");
+            const ctx = canvas.getContext("2d");
 
             // Access the camera
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
 
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
+            function scanQR() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            setInterval(async () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
-
-                if (qrCode) {
-                    qrResult.textContent = qrCode.data;
-                    sendQRToServer(qrCode.data);
+                    if (qrCode) {
+                        qrResult.textContent = qrCode.data; // Show scanned QR data
+                        sendQRToServer(qrCode.data); // Send data to API
+                        stopQRScanner(stream); // Stop camera after scanning
+                    }
                 }
-            }, 1000);
+                requestAnimationFrame(scanQR); // Keep scanning
+            }
+
+            scanQR();
+        }
+
+        function stopQRScanner(stream) {
+            stream.getTracks().forEach(track => track.stop());
         }
 
         function sendQRToServer(qrData) {
