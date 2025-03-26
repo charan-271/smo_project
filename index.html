@@ -17,37 +17,52 @@
     <video id="qr-video" autoplay></video>
     <canvas id="qr-canvas" hidden></canvas>
     <p>Scanned Data: <span id="qr-result">None</span></p>
+    <p id="status">📡 Waiting for scan...</p>
 
     <script>
+        let scanning = false;
+
         async function startQRScanner() {
             const video = document.getElementById("qr-video");
             const qrResult = document.getElementById("qr-result");
+            const status = document.getElementById("status");
             const canvas = document.getElementById("qr-canvas");
             const ctx = canvas.getContext("2d");
 
-            // Access the camera
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
+            try {
+                // ✅ Open the mobile camera
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                scanning = true;
+                status.textContent = "📷 Camera started. Scan a QR code.";
 
-            function scanQR() {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                function scanQR() {
+                    if (!scanning) return;
 
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                    if (qrCode) {
-                        qrResult.textContent = qrCode.data; // Show scanned QR data
-                        sendQRToServer(qrCode.data); // Send data to API
-                        stopQRScanner(stream); // Stop camera after scanning
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+
+                        if (qrCode) {
+                            qrResult.textContent = qrCode.data;  // Show the scanned result
+                            status.textContent = "✅ QR Code Scanned!";
+                            sendQRToServer(qrCode.data);  // Send data to API
+                            scanning = false;  // Stop scanning
+                            stopQRScanner(stream);  // Stop the camera
+                        }
                     }
+                    requestAnimationFrame(scanQR);
                 }
-                requestAnimationFrame(scanQR); // Keep scanning
-            }
 
-            scanQR();
+                scanQR();
+            } catch (error) {
+                status.textContent = "❌ Camera access denied!";
+                console.error("Camera Error:", error);
+            }
         }
 
         function stopQRScanner(stream) {
@@ -55,14 +70,23 @@
         }
 
         function sendQRToServer(qrData) {
+            const status = document.getElementById("status");
+            status.textContent = "📤 Sending data...";
+
             fetch("https://smo-backend-production.up.railway.app/api/employees/scan-rfid", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rfid: qrData })  // Sending QR as "rfid" key
+                body: JSON.stringify({ rfid: qrData })  // ✅ Sending QR as "rfid" key
             })
             .then(response => response.json())
-            .then(data => console.log("✅ Server Response:", data))
-            .catch(error => console.error("❌ Error:", error));
+            .then(data => {
+                console.log("✅ Server Response:", data);
+                status.textContent = "🎉 Data sent successfully!";
+            })
+            .catch(error => {
+                console.error("❌ Error:", error);
+                status.textContent = "❌ Error sending data!";
+            });
         }
 
         startQRScanner();
