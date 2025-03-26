@@ -6,16 +6,14 @@
     <title>QR Code Scanner</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
     <style>
-        video {
-            width: 100%;
-            max-width: 500px;
-        }
+        video { width: 100%; max-width: 500px; }
+        canvas { display: none; }
     </style>
 </head>
 <body>
     <h2>Scan QR Code</h2>
     <video id="qr-video" autoplay></video>
-    <canvas id="qr-canvas" hidden></canvas>
+    <canvas id="qr-canvas"></canvas>
     <p>Scanned Data: <span id="qr-result">None</span></p>
     <p id="status">📡 Waiting for scan...</p>
 
@@ -30,7 +28,6 @@
             const ctx = canvas.getContext("2d");
 
             try {
-                // ✅ Open the mobile camera
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
                 scanning = true;
@@ -48,11 +45,14 @@
                         const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
                         if (qrCode) {
-                            qrResult.textContent = qrCode.data;  // Show the scanned result
+                            console.log("✅ QR Code detected:", qrCode.data);  // Debug log
+                            qrResult.textContent = qrCode.data;  // Update UI
                             status.textContent = "✅ QR Code Scanned!";
-                            sendQRToServer(qrCode.data);  // Send data to API
-                            scanning = false;  // Stop scanning
-                            stopQRScanner(stream);  // Stop the camera
+                            sendQRToServer(qrCode.data);  // Send to API
+                            scanning = false;
+                            stopQRScanner(stream);
+                        } else {
+                            console.log("🔍 No QR code detected");  // Debug log
                         }
                     }
                     requestAnimationFrame(scanQR);
@@ -76,7 +76,7 @@
             fetch("https://smo-backend-production.up.railway.app/api/employees/scan-rfid", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rfid: qrData })  // ✅ Sending QR as "rfid" key
+                body: JSON.stringify({ rfid: qrData })
             })
             .then(response => response.json())
             .then(data => {
