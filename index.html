@@ -4,150 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script> <!-- QR Scanner Library -->
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
-        }
-        .container {
-            text-align: center;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        #video {
-            max-width: 100%;
-            width: 320px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #canvas {
-            display: none;
-        }
-        #output {
-            margin-top: 20px;
-            font-weight: bold;
-        }
-        #submitBtn {
-            margin-top: 10px;
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #submitBtn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
+        body { text-align: center; font-family: Arial, sans-serif; }
+        #reader { width: 300px; margin: auto; }
+        #result { margin-top: 20px; font-size: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>QR Code Scanner</h2>
-        <video id="video" playsinline autoplay></video>
-        <canvas id="canvas" width="320" height="240"></canvas>
-        <div id="output">Scanning...</div>
-        <button id="submitBtn" disabled>Submit QR Code</button>
-    </div>
+
+    <h2>Scan QR Code</h2>
+    <div id="reader"></div>
+    <p id="result">Scan a QR code...</p>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const output = document.getElementById('output');
-        const submitBtn = document.getElementById('submitBtn');
-        let scannedCode = null;
-
-        // Request camera access
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: "environment" // Prefer back camera on mobile
-                    } 
-                });
-                video.srcObject = stream;
-                video.setAttribute('playsinline', true);
-                video.play();
-                requestAnimationFrame(tick);
-            } catch (err) {
-                console.error("Error accessing camera:", err);
-                output.textContent = "Camera access denied. Please allow camera permissions.";
-            }
+        function onScanSuccess(qrCodeMessage) {
+            document.getElementById('result').innerText = "Scanned: " + qrCodeMessage;
+            sendQRToServer(qrCodeMessage); // Send scanned data to API
         }
 
-        // Scan QR code in each frame
-        function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert",
-                });
-                
-                if (code) {
-                    scannedCode = code.data;
-                    output.textContent = `QR Code Detected: ${scannedCode}`;
-                    submitBtn.disabled = false;
-                } else {
-                    output.textContent = "Scanning...";
-                }
-            }
-            
-            // Continue scanning if no code found
-            if (!scannedCode) {
-                requestAnimationFrame(tick);
-            }
+        function onScanFailure(error) {
+            console.warn(`QR Scan Error: ${error}`);
         }
 
-        // Submit scanned QR code
-        submitBtn.addEventListener('click', async () => {
-            if (!scannedCode) return;
+        let html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, onScanFailure);
 
-            try {
-                const response = await fetch('https://smo-backend-production.up.railway.app/api/employees/scan-rfid', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ 
-                        rfid: scannedCode  // Use 'rfid' key instead of 'qrCode'
-                    })
-                });
-
-                const result = await response.json();
-                
-                // Handle different possible response formats
-                if (result.error) {
-                    alert('Error: ' + result.error);
+        function sendQRToServer(qrData) {
+            fetch("https://smo-backend-production.up.railway.app/api/rfid/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ "rfid": qrData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === "Scan recorded successfully") {
+                    document.getElementById("result").innerText = 
+                        `✅ Employee: ${data.employee_name} | Progress: ${data.completed}/${data.target}`;
                 } else {
-                    alert('Submission successful: ' + JSON.stringify(result));
+                    document.getElementById("result").innerText = `❌ ${data.message}`;
                 }
-                
-                // Reset for next scan
-                scannedCode = null;
-                submitBtn.disabled = true;
-                requestAnimationFrame(tick);
-            } catch (error) {
-                console.error('Submission error:', error);
-                alert('Failed to submit QR code');
-            }
-        });
-
-        // Start camera when page loads
-        startCamera();
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                document.getElementById("result").innerText = "⚠️ Server Error!";
+            });
+        }
     </script>
+
 </body>
 </html>

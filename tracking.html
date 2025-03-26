@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode"></script> <!-- QR Scanner Library -->
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        #reader { width: 300px; margin: auto; }
+        #result { margin-top: 20px; font-size: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h2>Scan QR Code</h2>
+    <div id="reader"></div>
+    <p id="result">Scan a QR code...</p>
+
+    <script>
+        function onScanSuccess(qrCodeMessage) {
+            document.getElementById('result').innerText = "Scanned: " + qrCodeMessage;
+            sendQRToServer(qrCodeMessage); // Send scanned data to API
+        }
+
+        function onScanFailure(error) {
+            console.warn(`QR Scan Error: ${error}`);
+        }
+
+        let html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, onScanFailure);
+
+        function sendQRToServer(qrData) {
+            fetch("https://smo-backend-production.up.railway.app/api/rfid/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ "rfid": qrData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === "Scan recorded successfully") {
+                    document.getElementById("result").innerText = 
+                        `✅ Employee: ${data.employee_name} | Progress: ${data.completed}/${data.target}`;
+                } else {
+                    document.getElementById("result").innerText = `❌ ${data.message}`;
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                document.getElementById("result").innerText = "⚠️ Server Error!";
+            });
+        }
+    </script>
+
+</body>
+</html>
